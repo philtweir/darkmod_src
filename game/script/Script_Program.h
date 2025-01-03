@@ -34,7 +34,7 @@ class Library;
 #define MAX_STATEMENTS		(80 << 10)			// statement_t - 18 bytes last I checked (stgatilov: it was never 18 bytes, now it is 40 bytes)
 
 typedef enum {
-	ev_error = -1, ev_void, ev_scriptevent, ev_namespace, ev_externnamespace, ev_string, ev_float, ev_vector, ev_entity, ev_field, ev_function, ev_virtualfunction, ev_pointer, ev_object, ev_jumpoffset, ev_argsize, ev_boolean, ev_library, ev_libraryfunction
+	ev_error = -1, ev_void, ev_scriptevent, ev_namespace, ev_externnamespace, ev_string, ev_float, ev_int, ev_vector, ev_entity, ev_field, ev_function, ev_virtualfunction, ev_pointer, ev_object, ev_jumpoffset, ev_argsize, ev_boolean, ev_libraryfunction
 } etype_t;
 
 class function_t {
@@ -67,7 +67,7 @@ typedef union eval_s {
 	function_t			*function;
 	int 				_int;
 	int 				entity;
-	// RMV int				library;
+	int				_int_pair[ 2 ];
 } eval_t;
 
 /***********************************************************************
@@ -288,7 +288,7 @@ typedef union varEval_s {
 	int 					*intPtr;
 	byte					*bytePtr;
 	int 					*entityNumberPtr;
-	int 					libraryNumber;
+	int 					libraryFunctionNumber[2]; // TODO: function_t* is definitely bigger than this, given C++-ABI - but check portability to be sure
 	int						virtualFunction;
 	int						jumpOffset;
 	int						stackOffset;		// offset in stack for local variables
@@ -378,9 +378,9 @@ extern	idTypeDef	type_namespace;
 extern	idTypeDef	type_externnamespace;
 extern	idTypeDef	type_string;
 extern	idTypeDef	type_float;
+extern	idTypeDef	type_int;
 extern	idTypeDef	type_vector;
 extern	idTypeDef	type_entity;
-extern	idTypeDef	type_library;
 extern	idTypeDef	type_libraryfunction;
 extern  idTypeDef	type_field;
 extern	idTypeDef	type_function;
@@ -397,9 +397,9 @@ extern	idVarDef	def_namespace;
 extern	idVarDef	def_externnamespace;
 extern	idVarDef	def_string;
 extern	idVarDef	def_float;
+extern	idVarDef	def_int;
 extern	idVarDef	def_vector;
 extern	idVarDef	def_entity;
-extern	idVarDef	def_library;
 extern	idVarDef	def_libraryfunction;
 extern	idVarDef	def_field;
 extern	idVarDef	def_function;
@@ -520,7 +520,6 @@ public:
 	int											GetFunctionIndex( const function_t *func );
 
 	void										SetEntity( const char *name, idEntity *ent );
-	void										SetLibrary( const char *name, Library *library );
 
 	statement_t									*AllocStatement( void );
 	statement_t									&GetStatement( int index );

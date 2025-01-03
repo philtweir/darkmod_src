@@ -1223,7 +1223,7 @@ bool idInterpreter::Execute( void ) {
 			break;
 
 		case OP_LIBCALL:
-			CallLibraryEvent( st->a->value.libraryNumber, st->a->value.virtualFunction, st->c->value.argSize );
+			CallLibraryEvent( st->a->value.libraryFunctionNumber[0], st->a->value.libraryFunctionNumber[1], st->c->value.argSize );
 			break;
 
 		case OP_IFNOT:

@@ -207,9 +207,12 @@ inline EventArgs::EventArgs(char argType1, const char* argName1, const char* arg
 
 inline EventArgs::EventArgs(idList<EventArg>* argList) {
 	int i;
+	int num = (*argList).Num();
 
 	// EventArgs are capped at length 8.
-	assert((*argList).Num() <= 8);
+	assert(num <= 8);
+
+	args.SetNum(num);
 
 	for ( i = 0; i < (*argList).Num(); i++ ) {
 		args[i].type = (*argList)[i].type;

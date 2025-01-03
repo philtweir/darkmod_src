@@ -638,9 +638,7 @@ idEvent::Init
 void idEvent::Init( void ) {
 	gameLocal.Printf( "Initializing event system\n" );
 
-	if ( eventError ) {
-		gameLocal.Error( "%s", eventErrorMsg );
-	}
+	idEvent::CheckError();
 
 #ifdef CREATE_EVENT_CODE
 	void CreateEventCallbackHandler();
@@ -666,6 +664,17 @@ void idEvent::Init( void ) {
 
 	// the event system has started
 	initialized = true;
+}
+
+/*
+================
+idEvent::CheckError
+================
+*/
+void idEvent::CheckError( void ) {
+	if ( eventError ) {
+		gameLocal.Error( "%s", eventErrorMsg );
+	}
 }
 
 /*

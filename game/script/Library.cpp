@@ -42,7 +42,7 @@ idTypeInfo *Library::GetType( void ) const {
 	return Type;
 }
 
-const idEventDef EV_TDM_Library_GetLibraryCount( "GetLibraryCount", EventArgs(), 'f', "Returns the number of loaded pre-compiled mod libraries." );
+const idEventDef EV_TDM_Library_GetLibraryCount( "GetLibraryCount", EventArgs(), 'd', "Returns the number of loaded pre-compiled mod libraries." );
 
 /*
 ================
@@ -82,7 +82,6 @@ void Library::Construct(idStr _name, bool _mgr)
 		libraryNumber	= GetLibraryCount();
 		libraries.Append(this);
 		AddLibraryToHash(name, this);
-		gameLocal.program.SetLibrary(name, this);
 	}
 }
 
@@ -144,7 +143,7 @@ void Library::DebugInfo() {
 		}
 	} else {
 		int count = functions.Num();
-		gameLocal.Printf("Libraries: [%s] has %d functions\n", name.c_str(), count);
+		gameLocal.Printf("Libraries: [%s] has loaded %d functions\n", name.c_str(), count);
 	}
 }
 
@@ -261,6 +260,7 @@ void Library::LoadAll() {
 	for ( Library* library : libraries ) {
 		library->Load();
 	}
+	DebugInfo();
 }
 
 typedef union {
@@ -288,7 +288,8 @@ void Library::Load() {
 		}
 	}
 
-	libraryModule = new LibraryModule(this, path, "test");
+	idStr filename = path.StripPath().StripFileExtension() + "_";
+	libraryModule = new LibraryModule(this, path, filename);
 	libraryModule->Load(functions, &functionCallbacks);
 
 	Type = new idTypeInfo(

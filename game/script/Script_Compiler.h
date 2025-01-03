@@ -269,7 +269,7 @@ public :
 	void			CompileFile( const char *text, const char *filename, bool console );
 
 	static idTypeDef		*GetTypeForEventArg( char argType );
-	static char			GetEventArgForType( idTypeDef *type );
+	static char			GetEventArgForType( const idTypeDef *type );
 };
 
 #endif /* !__SCRIPT_COMPILER_H__ */
