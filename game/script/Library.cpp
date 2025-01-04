@@ -357,9 +357,12 @@ void LibraryModule::Load(idList<const function_t*> requestedFunctions, idList<id
 	int i = 0;
 	functionCallbacks->Resize(requestedFunctions.Num() + 1);
 
-	LoadFunction(&Initialize, "trm__initialize");
-	LoadFunction(&Deinitialize, "trm__deinitialize");
-	LoadFunction(&GetModuleName, "trm__module_name");
+	void* initialize = Sys_DLL_GetProcAddress( fh, "trm__initialize" );
+	Initialize = *reinterpret_cast<initFunc*>(&initialize);
+	void* deinitialize = Sys_DLL_GetProcAddress( fh, "trm__deinitialize" );
+	Deinitialize = *reinterpret_cast<boolFunc*>(&deinitialize);
+	void* get_module_name = Sys_DLL_GetProcAddress( fh, "trm__module_name" );
+	GetModuleName = *reinterpret_cast<strFunc*>(&get_module_name);
 	const char* moduleName = (parentLibrary->*GetModuleName)();
 
 	char functionName[2000] = "";
@@ -381,7 +384,12 @@ void LibraryModule::Load(idList<const function_t*> requestedFunctions, idList<id
 
 	(*functionCallbacks)[requestedFunctions.Num()] = {NULL, NULL};
 
-	(parentLibrary->*Initialize)();
+	(parentLibrary->*Initialize)(
+		idThread::ReturnString,
+		idThread::ReturnFloat,
+		idThread::ReturnInt,
+		idThread::ReturnVector
+	);
 }
 
 LibraryModule::~LibraryModule() {

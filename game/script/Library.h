@@ -17,8 +17,16 @@ Project: The Dark Mod (http://www.thedarkmod.com/)
 #define _LIBRARY_H
 
 #include "../gamesys/Class.h"
+#include "../../idlib/math/Vector.h"
 
 typedef bool (idClass::*boolFunc) ();
+typedef bool (idClass::*initFunc) (
+	void (*ReturnString)( const char *text ),
+	void (*ReturnFloat)( const float value ),
+	void (*ReturnInt)( const int value ),
+	void (*ReturnVector)( idVec3 const &vec )
+	// void (*ReturnEntity)( void *ent ) // TODO: fix void*
+);
 typedef const char* (idClass::*strFunc) ();
 class Library;
 
@@ -33,7 +41,7 @@ class LibraryModule {
 		idStr path;
 		idStr dllName;
 		uintptr_t fh;
-		boolFunc Initialize;
+		initFunc Initialize;
 		strFunc GetModuleName;
 		boolFunc Deinitialize;
 		template <typename T>
