@@ -25,10 +25,14 @@ Project: The Dark Mod (http://www.thedarkmod.com/)
 idTypeDef	type_void( ev_void, &def_void, "void", 0, NULL );
 idTypeDef	type_scriptevent( ev_scriptevent, &def_scriptevent, "scriptevent", sizeof(int), NULL );
 idTypeDef	type_namespace( ev_namespace, &def_namespace, "namespace", sizeof(int), NULL );
+idTypeDef	type_externnamespace( ev_externnamespace, &def_externnamespace, "extern namespace", sizeof(int), NULL );
 idTypeDef	type_string( ev_string, &def_string, "string", MAX_STRING_LEN, NULL );
+idTypeDef	type_bytes( ev_bytes, &def_bytes, "bytes", sizeof(char*), NULL );
 idTypeDef	type_float( ev_float, &def_float, "float", sizeof(float), NULL );
+idTypeDef	type_int( ev_float, &def_float, "int", sizeof(int), NULL );
 idTypeDef	type_vector( ev_vector, &def_vector, "vector", sizeof(idVec3), NULL );
 idTypeDef	type_entity( ev_entity, &def_entity, "entity", sizeof(int), NULL );					// stored as entity number pointer
+idTypeDef	type_libraryfunction( ev_libraryfunction, &def_libraryfunction, "library function", 2 * sizeof(int), NULL );					// stored as library number pointer
 idTypeDef	type_field( ev_field, &def_field, "field", sizeof(int), NULL );
 idTypeDef	type_function( ev_function, &def_function, "function", sizeof(int), &type_void );
 idTypeDef	type_virtualfunction( ev_virtualfunction, &def_virtualfunction, "virtual function", sizeof(int), NULL );
@@ -41,10 +45,14 @@ idTypeDef	type_boolean( ev_boolean, &def_boolean, "boolean", sizeof(int), NULL )
 idVarDef	def_void( &type_void );
 idVarDef	def_scriptevent( &type_scriptevent );
 idVarDef	def_namespace( &type_namespace );
+idVarDef	def_externnamespace( &type_externnamespace );
 idVarDef	def_string( &type_string );
+idVarDef	def_bytes( &type_bytes );
 idVarDef	def_float( &type_float );
+idVarDef	def_int( &type_int );
 idVarDef	def_vector( &type_vector );
 idVarDef	def_entity( &type_entity );
+idVarDef	def_libraryfunction( &type_libraryfunction );
 idVarDef	def_field( &type_field );
 idVarDef	def_function( &type_function );
 idVarDef	def_virtualfunction( &type_virtualfunction );
@@ -281,7 +289,7 @@ Adds a new parameter for a function type.
 ================
 */
 void idTypeDef::AddFunctionParm( idTypeDef *parmtype, const char *name ) {
-	if ( type != ev_function ) {
+	if ( type != ev_function && type != ev_libraryfunction ) {
 		throw idCompileError( "idTypeDef::AddFunctionParm : tried to add parameter on non-function type" );
 	}
 
@@ -372,7 +380,7 @@ If type is a function, then returns the function's return type
 ================
 */
 idTypeDef *idTypeDef::ReturnType( void ) const {
-	if ( type != ev_function ) {
+	if ( type != ev_function && type != ev_libraryfunction ) {
 		throw idCompileError( "idTypeDef::ReturnType: tried to get return type on non-function type" );
 	}
 
@@ -387,7 +395,7 @@ If type is a function, then sets the function's return type
 ================
 */
 void idTypeDef::SetReturnType( idTypeDef *returntype ) {
-	if ( type != ev_function ) {
+	if ( type != ev_function && type != ev_libraryfunction ) {
 		throw idCompileError( "idTypeDef::SetReturnType: tried to set return type on non-function type" );
 	}
 
@@ -624,7 +632,7 @@ idVarDef::SetFunction
 void idVarDef::SetFunction( function_t *func ) {
 	assert( typeDef );
 	initialized = initializedConstant;
-	assert( typeDef->Type() == ev_function );
+	assert( typeDef->Type() == ev_function || typeDef->Type() == ev_libraryfunction );
 	value.functionPtr = func;
 }
 
@@ -682,6 +690,10 @@ void idVarDef::SetValue( const eval_t &_value, bool constant ) {
 		idStr::Copynz( value.stringPtr, _value.stringPtr, MAX_STRING_LEN );
 		break;
 
+	case ev_bytes :
+		*value.bytesPtr = _value.bytesPtr;
+		break;
+
 	case ev_float :
 		*value.floatPtr = _value._float;
 		break;
@@ -699,6 +711,11 @@ void idVarDef::SetValue( const eval_t &_value, bool constant ) {
 	case ev_virtualfunction :
 		*(intptr_t*)(&value) = 0;
 		value.virtualFunction = _value._int;
+		break;
+
+	case ev_libraryfunction :
+		value.libraryFunctionNumber[0] = _value._int_pair[0];
+		value.libraryFunctionNumber[1] = _value._int_pair[1];
 		break;
 
 	case ev_object :
@@ -762,6 +779,10 @@ void idVarDef::PrintInfo( idFile *file, int instructionPointer ) const {
 		}
 		break;
 
+	case ev_libraryfunction :
+		file->Printf( "library function %s", GlobalName() );
+		break;
+
 	case ev_field :
 		file->Printf( "field %d", value.ptrOffset );
 		break;
@@ -776,7 +797,7 @@ void idVarDef::PrintInfo( idFile *file, int instructionPointer ) const {
 			switch( etype ) {
 			case ev_string :
 				file->Printf( "\"" );
-                len = static_cast<int>(strlen(value.stringPtr));
+				len = static_cast<int>(strlen(value.stringPtr));
 				ch = value.stringPtr;
 				for( i = 0; i < len; i++, ch++ ) {
 					if ( idStr::CharIsPrintable( *ch ) ) {
@@ -795,7 +816,7 @@ void idVarDef::PrintInfo( idFile *file, int instructionPointer ) const {
 				break;
 
 			case ev_float :
-                file->Printf( "%f", *value.floatPtr );
+				file->Printf( "%f", *value.floatPtr );
 				break;
 
 			case ev_virtualfunction :
@@ -1281,7 +1302,7 @@ idVarDef *idProgram::AllocDef( idTypeDef *type, const char *name, idVarDef *scop
 	idVarDef	*def_z;
 
 	// allocate a new def
-    def = AllocVarDef(type, name, scope);
+	def = AllocVarDef(type, name, scope);
 
 	if ( ( type->Type() == ev_vector ) || ( ( type->Type() == ev_field ) && ( type->FieldType()->Type() == ev_vector ) ) ) {
 		//
@@ -1550,7 +1571,7 @@ function_t *idProgram::FindFunction( const char *name ) const {
 
 		// skip past the ::
 		start = pos + 2;
-	} while( def->Type() == ev_namespace );
+	} while( def->Type() == ev_namespace || def->Type() == ev_externnamespace );
 
 	idStr funcName = fullname.Right( fullname.Length() - start );
 	def = GetDef( NULL, funcName, namespaceDef );

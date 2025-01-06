@@ -358,6 +358,7 @@ void idGameLocal::Clear( void )
 	spawnCount = INITIAL_SPAWN_COUNT;
 	mapSpawnCount = 0;
 	camera = NULL;
+	library = NULL;
 	aasList.Clear();
 	aasNames.Clear();
 	spawnArgs.Clear();
@@ -8364,6 +8365,27 @@ int idGameLocal::LogSuspiciousEvent( SuspiciousEvent se, bool forceLog ) // gray
 	}
 
 	return index;
+}
+
+Library* idGameLocal::GetLibrary()
+{
+	// Only set up a library if we know that we need it.
+	if (!library) {
+		library = new Library(true);
+		library->Construct("(manager)", true);
+	}
+
+	return library;
+}
+
+void idGameLocal::LoadLibraries()
+{
+	if (!library) {
+		Printf( "Libraries: (not used)\n" );
+		return;
+	}
+
+	library->LoadAll();
 }
 
 

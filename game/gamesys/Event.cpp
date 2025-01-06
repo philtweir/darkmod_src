@@ -121,6 +121,10 @@ void idEventDef::Construct()
 			argsize += sizeof(int);
 			break;
 
+		case D_EVENT_BYTES :
+			argsize += sizeof(char*);
+			break;
+
 		case D_EVENT_ENTITY :
 		case D_EVENT_ENTITY_NULL :
 			argsize += sizeof(idEntityPtr<idEntity>);
@@ -336,6 +340,10 @@ idEvent *idEvent::Alloc( const idEventDef *evdef, int numargs, va_list args ) {
 		case D_EVENT_FLOAT :
 		case D_EVENT_INTEGER :
 			*reinterpret_cast<int *>( dataPtr ) = arg->value;
+			break;
+
+		case D_EVENT_BYTES :
+			*reinterpret_cast<char *>( dataPtr ) = arg->value;
 			break;
 
 		case D_EVENT_VECTOR :
@@ -567,6 +575,10 @@ void idEvent::ServiceEvents( void ) {
 				args[ i ] = *reinterpret_cast<int *>( &data[ offset ] );
 				break;
 
+			case D_EVENT_BYTES :
+				args[ i ] = *reinterpret_cast<char *>( &data[ offset ] );
+				break;
+
 			case D_EVENT_VECTOR :
 				*reinterpret_cast<idVec3 **>( &args[ i ] ) = reinterpret_cast<idVec3 *>( &data[ offset ] );
 				break;
@@ -638,9 +650,7 @@ idEvent::Init
 void idEvent::Init( void ) {
 	gameLocal.Printf( "Initializing event system\n" );
 
-	if ( eventError ) {
-		gameLocal.Error( "%s", eventErrorMsg );
-	}
+	idEvent::CheckError();
 
 #ifdef CREATE_EVENT_CODE
 	void CreateEventCallbackHandler();
@@ -666,6 +676,17 @@ void idEvent::Init( void ) {
 
 	// the event system has started
 	initialized = true;
+}
+
+/*
+================
+idEvent::CheckError
+================
+*/
+void idEvent::CheckError( void ) {
+	if ( eventError ) {
+		gameLocal.Error( "%s", eventErrorMsg );
+	}
 }
 
 /*
@@ -723,6 +744,9 @@ void idEvent::Save( idSaveGame *savefile ) {
 				case D_EVENT_INTEGER :
 					savefile->WriteInt( *reinterpret_cast<int *>( dataPtr ) );
 					size += sizeof( int );
+					break;
+				case D_EVENT_BYTES :
+					gameLocal.Error( "idEvent::Save : Cannot save bytes out in an event" ); // TODO: is this sensible?
 					break;
 				case D_EVENT_ENTITY :
 				case D_EVENT_ENTITY_NULL :
@@ -824,6 +848,9 @@ void idEvent::Restore( idRestoreGame *savefile ) {
 					case D_EVENT_INTEGER :
 						savefile->ReadInt( *reinterpret_cast<int *>( dataPtr ) );
 						size += sizeof( int );
+						break;
+					case D_EVENT_BYTES :
+						gameLocal.Error( "idEvent::Save : Cannot save bytes out in an event" ); // TODO: is this sensible? It could be unboundedly big, and bytes events are very specific use-cases.
 						break;
 					case D_EVENT_ENTITY :
 					case D_EVENT_ENTITY_NULL :

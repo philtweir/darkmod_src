@@ -92,10 +92,12 @@ enum {
 	OP_EVENTCALL,
 	OP_OBJECTCALL,
 	OP_SYSCALL,
+	OP_LIBCALL, // TDM libraries
 
 	OP_STORE_F,
 	OP_STORE_V,
 	OP_STORE_S,
+	OP_STORE_B,
 	OP_STORE_ENT,
 	OP_STORE_BOOL,
 	OP_STORE_OBJENT,
@@ -155,6 +157,7 @@ enum {
 	OP_PUSH_F,
 	OP_PUSH_V,
 	OP_PUSH_S,
+	OP_PUSH_B,
 	OP_PUSH_ENT,
 	OP_PUSH_OBJ,
 	OP_PUSH_OBJENT,
@@ -204,6 +207,7 @@ private:
 	int				currentLineNumber;
 	int				currentFileNumber;
 	int				errorCount;
+	Library*			activeLibrary;
 					
 	idVarDef		*scope;				// the function being parsed, or NULL
 	const idVarDef	*basetype;			// for accessing fields
@@ -237,6 +241,7 @@ private:
 	idVarDef		*ParseObjectCall( idVarDef *object, idVarDef *func );
 	idVarDef		*ParseEventCall( idVarDef *object, idVarDef *func );
 	idVarDef		*ParseSysObjectCall( idVarDef *func );
+	idVarDef		*ParseLibCall( idVarDef *libDef, idVarDef *func );
 	idVarDef		*LookupDef( const char *name, const idVarDef *baseobj );
 	idVarDef		*ParseValue( void );
 	idVarDef		*GetTerm( void );
@@ -251,7 +256,9 @@ private:
 	void			ParseStatement( void );
 	void			ParseObjectDef( const char *objname );
 	idTypeDef		*ParseFunction( idTypeDef *returnType, const char *name );
+	idTypeDef		*ParseLibraryFunction( idTypeDef *returnType, const char *name );
 	void			ParseFunctionDef( idTypeDef *returnType, const char *name );
+	void			ParseLibraryFunctionDef( idTypeDef *returnType, const char *name );
 	void			ParseVariableDef( idTypeDef *type, const char *name );
 	void			ParseEventDef( idTypeDef *type, const char *name );
 	void			ParseDefs( void );
@@ -264,6 +271,7 @@ public :
 	void			CompileFile( const char *text, const char *filename, bool console );
 
 	static idTypeDef		*GetTypeForEventArg( char argType );
+	static char			GetEventArgForType( const idTypeDef *type );
 };
 
 #endif /* !__SCRIPT_COMPILER_H__ */

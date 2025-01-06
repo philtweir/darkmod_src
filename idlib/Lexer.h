@@ -112,6 +112,7 @@ typedef enum {
 
 #define P_PRECOMP					51
 #define P_DOLLAR					52
+#define P_AT						53
 
 // punctuation
 typedef struct punctuation_s
@@ -288,6 +289,7 @@ public:
 	int				EndOfFile( void );
 					// returns the current filename
 	const char *	GetFileName( void );
+	const char *	GetFileStem( void );
 	const char *	GetDisplayFileName( void );
 					// get offset in script
 	const int		GetFileOffset( void );
@@ -307,11 +309,14 @@ public:
 
 					// set the base folder to load files from
 	static void		SetBaseFolder( const char *path );
+	const bool		IsLibraryHeader( void ) const;
+	const char*		GetLibraryPath( void );
 
 private:
 	int				loaded;					// set when a script file is loaded from file or memory
 	idStr			displayFilename;		// shortened file path for printing warnings
 	idStr			filename;				// file path of the script (absolute)
+	idStr			filestem;				// file path of the script (absolute)
 	int				allocated;				// true if buffer memory was allocated
 	const char *	buffer;					// buffer containing the script
 	const char *	script_p;				// current pointer in the script
@@ -331,8 +336,10 @@ private:
 	idToken			token;					// available token
 	idLexer *		next;					// next script in a chain
 	bool			hadError;				// set by idLexer::Error, even if the error is supressed
+	bool			couldBeLibraryHeader;				// set by idLexer::Error, even if the error is supressed
 
 	static char		baseFolder[ 256 ];		// base folder to load files from
+	idStr			libraryPath;		// path to associated compiled library, or ""
 
 private:
 	void			CreatePunctuationTable( const punctuation_t *punctuations );
@@ -349,6 +356,10 @@ private:
 
 ID_INLINE const char *idLexer::GetFileName( void ) {
 	return idLexer::filename;
+}
+
+ID_INLINE const char *idLexer::GetFileStem( void ) {
+	return idLexer::filestem;
 }
 
 ID_INLINE const char *idLexer::GetDisplayFileName( void ) {

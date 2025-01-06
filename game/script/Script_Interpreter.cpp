@@ -653,6 +653,8 @@ void idInterpreter::LeaveFunction( idVarDef *returnDef ) {
 	// return value
 	if ( returnDef ) {
 		switch( returnDef->Type() ) {
+		// We intentionally do not allow ev_bytes to be passed back from script functions
+		// as we have no way of persisting it reliably, so it should be short-lived.
 		case ev_string :
 			gameLocal.program.ReturnString( GetString( returnDef ) );
 			break;
@@ -734,6 +736,10 @@ void idInterpreter::CallEvent( const function_t *func, int argsize ) {
 			gameLocal.program.ReturnInteger( 0 );
 			break;
 
+		case D_EVENT_BYTES :
+			gameLocal.program.ReturnBytes( 0 );
+			break;
+
 		case D_EVENT_FLOAT :
 			gameLocal.program.ReturnFloat( 0 );
 			break;
@@ -769,6 +775,11 @@ void idInterpreter::CallEvent( const function_t *func, int argsize ) {
 		case D_EVENT_INTEGER :
 			var.intPtr = ( int * )&localstack[ start + pos ];
 			( *( int * )&data[ i ] ) = int( *var.floatPtr );
+			break;
+
+		case D_EVENT_BYTES :
+			var.bytesPtr = ( char ** )&localstack[ start + pos ];
+			( *( char ** )&data[ i ] ) = *var.bytesPtr;
 			break;
 
 		case D_EVENT_FLOAT :
@@ -871,6 +882,97 @@ bool idInterpreter::MultiFrameEventInProgress( void ) const {
 
 /*
 ================
+idInterpreter::CallLibraryEvent
+================
+*/
+void idInterpreter::CallLibraryEvent( int libraryNumber, int functionNumber, int argsize ) {
+	int 				i;
+	int					j;
+	varEval_t			source;
+	int 				pos;
+	int 				start;
+	intptr_t			data[ D_EVENT_MAXARGS ];
+	const idEventDef	*evdef;
+	const char			*format;
+	Library*			libraryMgr = gameLocal.GetLibrary();
+	Library*			library = libraryMgr->libraries[libraryNumber];
+	const function_t*		func = library->GetFunction(functionNumber);
+
+	if ( !func ) {
+		Error( "NULL function" );
+	}
+
+	assert( func->eventdef );
+	evdef = func->eventdef;
+
+	start = localstackUsed - argsize;
+
+	format = evdef->GetArgFormat();
+	for( j = 0, i = 0, pos = 0; ( pos < argsize ) || ( format[ i ] != 0 ); i++ ) {
+		data[i] = 0;	//stgatilov: clear for easier debugging in x64
+		switch( format[ i ] ) {
+		case D_EVENT_INTEGER :
+			source.intPtr = ( int * )&localstack[ start + pos ];
+			*( int * )&data[ i ] = int( *source.floatPtr );
+			break;
+
+		case D_EVENT_BYTES :
+			source.bytesPtr = ( char ** )&localstack[ start + pos ];
+			*( char ** )&data[ i ] = *source.bytesPtr;
+			break;
+
+		case D_EVENT_FLOAT :
+			source.intPtr = ( int * )&localstack[ start + pos ];
+			*( float * )&data[ i ] = *source.floatPtr;
+			break;
+
+		case D_EVENT_VECTOR :
+			source.intPtr = ( int * )&localstack[ start + pos ];
+			*( idVec3 ** )&data[ i ] = source.vectorPtr;
+			break;
+
+		case D_EVENT_STRING :
+			*( const char ** )&data[ i ] = ( char * )&localstack[ start + pos ];
+			break;
+
+		case D_EVENT_ENTITY :
+			source.intPtr = ( int * )&localstack[ start + pos ];
+			*( idEntity ** )&data[ i ] = GetEntity( *source.entityNumberPtr );
+			if ( !*( idEntity ** )&data[ i ] ) {
+				Warning( "Entity not found for event '%s'. Terminating thread.", evdef->GetName() );
+				threadDying = true;
+				PopParms( argsize );
+				return;
+			}
+			break;
+
+		case D_EVENT_ENTITY_NULL :
+			source.intPtr = ( int * )&localstack[ start + pos ];
+			*( idEntity ** )&data[ i ] = GetEntity( *source.entityNumberPtr );
+			break;
+
+		case D_EVENT_TRACE :
+			Error( "trace type not supported from script for '%s' event.", evdef->GetName() );
+			break;
+
+		default :
+			Error( "Invalid arg format string for '%s' event.", evdef->GetName() );
+			break;
+		}
+
+		pos += func->parmSize[ j++ ];
+	}
+
+	popParms = argsize;
+	library->ProcessEventArgPtr( evdef, data );
+	if ( popParms ) {
+		PopParms( popParms );
+	}
+	popParms = 0;
+}
+
+/*
+================
 idInterpreter::CallSysEvent
 ================
 */
@@ -900,6 +1002,11 @@ void idInterpreter::CallSysEvent( const function_t *func, int argsize ) {
 		case D_EVENT_INTEGER :
 			source.intPtr = ( int * )&localstack[ start + pos ];
 			*( int * )&data[ i ] = int( *source.floatPtr );
+			break;
+
+		case D_EVENT_BYTES :
+			source.bytesPtr = ( char ** )&localstack[ start + pos ];
+			*( char ** )&data[ i ] = *source.bytesPtr;
 			break;
 
 		case D_EVENT_FLOAT :
@@ -1134,6 +1241,10 @@ bool idInterpreter::Execute( void ) {
 
 		case OP_SYSCALL:
 			CallSysEvent( st->a->value.functionPtr, st->b->value.argSize );
+			break;
+
+		case OP_LIBCALL:
+			CallLibraryEvent( st->a->value.libraryFunctionNumber[0], st->a->value.libraryFunctionNumber[1], st->c->value.argSize );
 			break;
 
 		case OP_IFNOT:
@@ -1631,6 +1742,12 @@ bool idInterpreter::Execute( void ) {
 			SetString( st->b, GetString( st->a ) );
 			break;
 
+		case OP_STORE_B:
+			var_a = GetVariable( st->a );
+			var_b = GetVariable( st->b );
+			*var_b.bytesPtr = *var_a.bytesPtr;
+			break;
+
 		case OP_STORE_V:
 			var_a = GetVariable( st->a );
 			var_b = GetVariable( st->b );
@@ -1933,6 +2050,11 @@ bool idInterpreter::Execute( void ) {
 			PushString( GetString( st->a ) );
 			break;
 
+		case OP_PUSH_B:
+			var_a = GetVariable( st->a );
+			PushBytes( *var_a.bytesPtr );
+			break;
+
 		case OP_PUSH_V:
 			var_a = GetVariable( st->a );
             PushVector(*var_a.vectorPtr);
@@ -2021,6 +2143,10 @@ bool idInterpreter::EnterFunctionVarArgVN(const function_t *func, bool clearStac
 
 			case 's':
 				PushString(va_arg(args, char *));
+			break;
+
+			case 'B':
+				PushBytes(va_arg(args, char *));
 			break;
 
 			case 'f':

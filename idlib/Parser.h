@@ -38,6 +38,8 @@ Project: The Dark Mod (http://www.thedarkmod.com/)
 #define INDENT_IFDEF			0x0008
 #define INDENT_IFNDEF			0x0010
 
+const char MAGIC_DEF_LIBRARY[] = "#library";
+
 // macro definitions
 typedef struct define_s {
 	char *			name;						// define name
@@ -145,6 +147,7 @@ public:
 	int				GetFlags( void ) const;
 					// returns the current filename
 	const char *	GetFileName( void ) const;
+	const char *	GetFileStem( void ) const;
 	const char *	GetDisplayFileName( void ) const;
 					// get current offset in current script
 	const int		GetFileOffset( void ) const;
@@ -171,6 +174,8 @@ public:
 					// stgatilov: returns string representation of macro value
 					// it is just concatenation of all replacement tokens (useful for constants)
 	idStr			GetDefineValueString(const char *name);
+	const bool		InLibraryHeader( void ) const;
+	const idStr		GetLibraryPath( void ) const;
 
 private:
 	int				loaded;						// set when a source file is loaded from file or memory
@@ -223,6 +228,7 @@ private:
 	int				Evaluate( int *intvalue, double *floatvalue, int integer );
 	int				DollarEvaluate( int *intvalue, double *floatvalue, int integer);
 	int				Directive_define( void );
+	int				Directive_library( void );
 	int				Directive_elif( void );
 	int				Directive_if( void );
 	int				Directive_line( void );
@@ -238,12 +244,30 @@ private:
 	int				ReadDollarDirective( void );
 };
 
+ID_INLINE const char *idParser::GetFileStem( void ) const {
+	if ( idParser::scriptstack ) {
+		return idParser::scriptstack->GetFileStem();
+	}
+	else {
+		return "";
+	}
+}
+
 ID_INLINE const char *idParser::GetFileName( void ) const {
 	if ( idParser::scriptstack ) {
 		return idParser::scriptstack->GetFileName();
 	}
 	else {
 		return "";
+	}
+}
+
+ID_INLINE const bool idParser::InLibraryHeader( void ) const {
+	if ( idParser::scriptstack ) {
+		return idParser::scriptstack->IsLibraryHeader();
+	}
+	else {
+		return false;
 	}
 }
 

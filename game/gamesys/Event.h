@@ -36,6 +36,7 @@ static_assert(sizeof(idVec3) == 12, "Scripting system assumes idVec3 has 12-byte
 #define D_EVENT_VOID				( ( char )0 )
 #define D_EVENT_INTEGER				'd'
 #define D_EVENT_FLOAT				'f'
+#define D_EVENT_BYTES				'B'
 #define D_EVENT_VECTOR				'v'
 #define D_EVENT_STRING				's'
 #define D_EVENT_ENTITY				'e'
@@ -130,6 +131,7 @@ public:
 	void						Schedule( idClass *object, const idTypeInfo *cls, int time );
 	byte						*GetData( void );
 	void						Print();
+	static void					CheckError( void );
 
 	static void					CancelEvents( const idClass *obj, const idEventDef *evdef = NULL );
 	static void					ClearEventList( void );

@@ -96,10 +96,12 @@ opcode_t idCompiler::opcodes[] = {
 	{ ".", "EVENTCALL", 2, false, &def_entity, &def_function, &def_void },
 	{ ".", "OBJECTCALL", 2, false, &def_object, &def_function, &def_void },
 	{ ".", "SYSCALL", 2, false, &def_void, &def_function, &def_void },
+	{ ".", "LIBCALL", 2, false, &def_externnamespace, &def_libraryfunction, &def_void },
 
 	{ "=", "STORE_F", 6, true, &def_float, &def_float, &def_float },
 	{ "=", "STORE_V", 6, true, &def_vector, &def_vector, &def_vector },
 	{ "=", "STORE_S", 6, true, &def_string, &def_string, &def_string },
+	{ "=", "STORE_B", 6, true, &def_bytes, &def_bytes, &def_bytes },
 	{ "=", "STORE_ENT", 6, true, &def_entity, &def_entity, &def_entity },
 	{ "=", "STORE_BOOL", 6, true, &def_boolean, &def_boolean, &def_boolean },
 	{ "=", "STORE_OBJENT", 6, true, &def_object, &def_entity, &def_object },
@@ -161,6 +163,7 @@ opcode_t idCompiler::opcodes[] = {
 	{ "<PUSH>", "PUSH_F", -1, false, &def_float, &def_float, &def_void },
 	{ "<PUSH>", "PUSH_V", -1, false, &def_vector, &def_vector, &def_void },
 	{ "<PUSH>", "PUSH_S", -1, false, &def_string, &def_string, &def_void },
+	{ "<PUSH>", "PUSH_B", -1, false, &def_bytes, &def_bytes, &def_void },
 	{ "<PUSH>", "PUSH_ENT", -1, false, &def_entity, &def_entity, &def_void },
 	{ "<PUSH>", "PUSH_OBJ", -1, false, &def_object, &def_object, &def_void },
 	{ "<PUSH>", "PUSH_OBJENT", -1, false, &def_entity, &def_object, &def_void },
@@ -209,6 +212,7 @@ idCompiler::idCompiler() {
 	loopDepth			= 0;
 	eof					= false;
 	braceDepth			= 0;
+	activeLibrary = NULL;
 	immediateType		= NULL;
 	basetype			= NULL;
 	currentLineNumber	= 0;
@@ -403,6 +407,12 @@ idVarDef *idCompiler::FindImmediate( const idTypeDef *type, const eval_t *eval, 
 			}
 			break;
 
+		case ev_bytes :
+			if ( *def->value.bytesPtr == eval->bytesPtr ) {
+				return def;
+			}
+			break;
+
 		case ev_string :
 			if ( idStr::Cmp( def->value.stringPtr, string ) == 0 ) {
 				return def;
@@ -417,6 +427,12 @@ idVarDef *idCompiler::FindImmediate( const idTypeDef *type, const eval_t *eval, 
 
 		case ev_virtualfunction :
 			if ( def->value.virtualFunction == eval->_int ) {
+				return def;
+			}
+			break;
+
+		case ev_libraryfunction :
+			if ( def->value.libraryFunctionNumber[1] == eval->_int_pair[1] && def->value.libraryFunctionNumber[0] == eval->_int_pair[0] ) {
 				return def;
 			}
 			break;
@@ -844,12 +860,16 @@ idTypeDef *idCompiler::CheckType( void ) {
 	
 	if ( token == "float" ) {
 		type = &type_float;
+	} else if ( token == "int" ) {
+		type = &type_int;
 	} else if ( token == "vector" ) {
 		type = &type_vector;
 	} else if ( token == "entity" ) {
 		type = &type_entity;
 	} else if ( token == "string" ) {
 		type = &type_string;
+	} else if ( token == "bytes" ) {
+		type = &type_bytes;
 	} else if ( token == "void" ) {
 		type = &type_void;
 	} else if ( token == "object" ) {
@@ -858,6 +878,8 @@ idTypeDef *idCompiler::CheckType( void ) {
 		type = &type_boolean;
 	} else if ( token == "namespace" ) {
 		type = &type_namespace;
+	} else if ( token == "extern" ) {
+		type = &type_externnamespace;
 	} else if ( token == "scriptEvent" ) {
 		type = &type_scriptevent;
 	} else {
@@ -889,7 +911,7 @@ idTypeDef *idCompiler::ParseType( void ) {
 		Error( "scriptEvents can only defined in the global namespace" );
 	}
 
-	if ( ( type == &type_namespace ) && ( scope->Type() != ev_namespace ) ) {
+	if ( ( type == &type_namespace || type == &type_externnamespace ) && ( scope->Type() != ev_namespace && scope->Type() != ev_externnamespace ) ) {
 		Error( "A namespace may only be defined globally, or within another namespace" );
 	}
 
@@ -930,7 +952,7 @@ idVarDef *idCompiler::EmitFunctionParms( int op, idVarDef *func, int startarg, i
 	int				resultOp;
 
 	type = func->TypeDef();
-	if ( func->Type() != ev_function ) {
+	if ( func->Type() != ev_function && func->Type() != ev_libraryfunction ) {
 		Error( "'%s' is not a function", func->Name() );
 	}
 
@@ -967,7 +989,29 @@ idVarDef *idCompiler::EmitFunctionParms( int op, idVarDef *func, int startarg, i
 	}
 
 	if ( op == OP_CALL ) {
-		EmitOpcode( op, func, 0 );
+		if (func->Type() == ev_libraryfunction) {
+			eval_t eval;
+
+			memset( &eval, 0, sizeof( eval ) );
+			int libraryNumber = func->value.functionPtr->filenum;
+
+			Library *libraryMgr = gameLocal.GetLibrary();
+			Library *library = libraryMgr->libraries[libraryNumber];
+			eval._int_pair[0] = libraryNumber;
+			eval._int_pair[1] = library->GetFunctionNumber( func->value.functionPtr );
+			if ( eval._int_pair[1] < 0 ) {
+				Error( "Function '%s' not found in library '%s'", func->Name(), library->name.c_str() );
+			}
+
+			EmitOpcode( OP_LIBCALL, GetImmediate( &type_libraryfunction, &eval, "" ), 0);
+			// Tidy up if duplicate.
+
+			// need arg size seperate since script object may be NULL
+			statement_t &statement = gameLocal.program.GetStatement( gameLocal.program.NumStatements() - 1 );
+			statement.c = SizeConstant( func->value.functionPtr->parmTotal );
+		} else {
+			EmitOpcode( op, func, 0 );
+		}
 	} else if ( ( op == OP_OBJECTCALL ) || ( op == OP_OBJTHREAD ) ) {
 		EmitOpcode( op, object, VirtualFunctionConstant( func ) );
 
@@ -998,6 +1042,10 @@ idVarDef *idCompiler::EmitFunctionParms( int op, idVarDef *func, int startarg, i
 
 		case ev_float :
 			resultOp = OP_STORE_F;
+			break;
+
+		case ev_bytes :
+			resultOp = OP_STORE_B;
 			break;
 
 		case ev_vector :
@@ -1045,11 +1093,11 @@ idCompiler::ParseFunctionCall
 idVarDef *idCompiler::ParseFunctionCall( idVarDef *funcDef ) {
 	assert( funcDef );
 
-	if ( funcDef->Type() != ev_function ) {
+	if ( funcDef->Type() != ev_function && funcDef->Type() != ev_libraryfunction ) {
 		Error( "'%s' is not a function", funcDef->Name() );
 	}
 
-	if ( funcDef->initialized == idVarDef::uninitialized ) {
+	if ( funcDef->initialized == idVarDef::uninitialized && funcDef->Type() == ev_function ) {
 		Error( "Function '%s' has not been defined yet", funcDef->GlobalName() );
 	}
 
@@ -1062,7 +1110,7 @@ idVarDef *idCompiler::ParseFunctionCall( idVarDef *funcDef ) {
 		return EmitFunctionParms( OP_THREAD, funcDef, 0, 0, NULL );
 	} else {
 		if ( ( funcDef->initialized != idVarDef::uninitialized ) && funcDef->value.functionPtr->eventdef ) {
-			if ( ( scope->Type() != ev_namespace ) && ( scope->scope->Type() == ev_object ) ) {
+			if ( ( scope->Type() != ev_namespace  && scope->Type() != ev_externnamespace) && ( scope->scope->Type() == ev_object ) ) {
 				// get the local object pointer
 				idVarDef *thisdef = gameLocal.program.GetDef( scope->scope->TypeDef(), "self", scope );
 				if ( !thisdef ) {
@@ -1070,7 +1118,7 @@ idVarDef *idCompiler::ParseFunctionCall( idVarDef *funcDef ) {
 				}
 
 				return ParseEventCall( thisdef, funcDef );
-			} else {
+			} else if ( funcDef->Type() != ev_libraryfunction ) {
 				Error( "Built-in functions cannot be called without an object" );
 			}
 		}
@@ -1148,6 +1196,35 @@ idVarDef *idCompiler::ParseSysObjectCall( idVarDef *funcDef ) {
 
 /*
 ============
+idCompiler::ParseLibCall
+============
+*/
+idVarDef *idCompiler::ParseLibCall( idVarDef *libDef, idVarDef *funcDef ) {
+	if ( callthread ) {
+		Error( "Cannot call built-in functions as a thread" );
+	}
+
+	if ( libDef->Type() != ev_externnamespace ) {
+		Error( "'%s' is not a library", libDef->Name() );
+	}
+
+	if ( funcDef->Type() != ev_function ) {
+		Error( "'%s' is not a function", funcDef->Name() );
+	}
+
+	if ( !funcDef->value.functionPtr->eventdef ) {
+		Error( "\"%s\" cannot be called with object notation", funcDef->Name() );
+	}
+
+	if ( !idThread::Type.RespondsTo( *funcDef->value.functionPtr->eventdef ) ) {
+		Error( "\"%s\" is not callable as a library function", funcDef->Name() );
+	}
+
+	return EmitFunctionParms( OP_LIBCALL, funcDef, 0, 0, NULL );
+}
+
+/*
+============
 idCompiler::LookupDef
 ============
 */
@@ -1174,7 +1251,7 @@ idVarDef *idCompiler::LookupDef( const char *name, const idVarDef *baseobj ) {
 		def = gameLocal.program.GetDef( NULL, name, scope );
 		if ( !def ) {
 			// if we're in a member function, check types local to the object
-			if ( ( scope->Type() != ev_namespace ) && ( scope->scope->Type() == ev_object ) ) {
+			if ( ( scope->Type() != ev_namespace && scope->Type() != ev_externnamespace ) && ( scope->scope->Type() == ev_object ) ) {
 				// get the local object pointer
 				idVarDef *thisdef = gameLocal.program.GetDef( scope->scope->TypeDef(), "self", scope );
 
@@ -1270,8 +1347,8 @@ idVarDef *idCompiler::ParseValue( void ) {
 			Error( "Unknown value \"%s\"", name.c_str() );
 		}
 	// if namespace, then look up the variable in that namespace
-	} else if ( def->Type() == ev_namespace ) {
-		while( def->Type() == ev_namespace ) {
+	} else if ( def->Type() == ev_namespace || def->Type() == ev_externnamespace ) {
+		while( def->Type() == ev_namespace || def->Type() == ev_externnamespace ) {
 			ExpectToken( "::" );
 			ParseName( name );
 			namespaceDef = def;
@@ -1503,7 +1580,7 @@ idVarDef *idCompiler::GetExpression( int priority ) {
 		oldtype = basetype;
 
 		// field access needs scope from object
-		if ( ( op->name[ 0 ] == '.' ) && e->TypeDef()->Inherits( &type_object ) ) {
+		if ( ( op->name[ 0 ] == '.' ) && (e->TypeDef()->Inherits( &type_object ))) {
 			// save off what type this field is part of
 			basetype = e->TypeDef()->def;
 		}
@@ -2003,7 +2080,7 @@ void idCompiler::ParseObjectDef( const char *objname ) {
 
 	oldscope = scope;
 	if ( scope->Type() != ev_namespace ) {
-		Error( "Objects cannot be defined within functions or other objects" );
+		Error( "Objects cannot be defined within functions, libraries or other objects" );
 	}
 
 	// make sure it doesn't exist before we create it
@@ -2066,6 +2143,35 @@ void idCompiler::ParseObjectDef( const char *objname ) {
 
 /*
 ============
+idCompiler::ParseLibraryFunction
+
+parse a function type
+============
+*/
+idTypeDef *idCompiler::ParseLibraryFunction( idTypeDef *returnType, const char *name ) {
+	idTypeDef	newtype( ev_libraryfunction, NULL, name, type_libraryfunction.Size(), returnType );
+	idTypeDef	*type;
+	
+	if ( scope->Type() != ev_externnamespace ) {
+		Error("Library functions must always be namespaced with extern: %s", name);
+	}
+
+	if ( !CheckToken( ")" ) ) {
+		idStr parmName;
+		do {
+			type = ParseType();
+			ParseName( parmName );
+			newtype.AddFunctionParm( type, parmName );
+		} while( CheckToken( "," ) );
+
+		ExpectToken( ")" );
+	}
+
+	return gameLocal.program.GetType( newtype, true );
+}
+
+/*
+============
 idCompiler::ParseFunction
 
 parse a function type
@@ -2108,6 +2214,11 @@ void idCompiler::ParseFunctionDef( idTypeDef *returnType, const char *name ) {
 	const idTypeDef	*parmType;
 	function_t		*func;
 	statement_t		*pos;
+
+	if ( scope->Type() == ev_externnamespace ) {
+		ParseLibraryFunctionDef( returnType, name );
+		return;
+	}
 
 	if ( ( scope->Type() != ev_namespace ) && !scope->TypeDef()->Inherits( &type_object ) ) {
 		Error( "Functions may not be defined within other functions" );
@@ -2266,12 +2377,15 @@ void idCompiler::ParseVariableDef( idTypeDef *type, const char *name ) {
 		// if a local variable in a function then write out interpreter code to initialize variable
 		if ( scope->Type() == ev_function ) {
 			def2 = GetExpression( TOP_PRIORITY );
-			if ( ( type == &type_float ) && ( def2->TypeDef() == &type_float ) ) {
+			// TODO: resolve the fact that type_int only applies to direct float/int assignment
+			if ( ( type == &type_float || type == &type_int ) && ( def2->TypeDef() == &type_float || def2->TypeDef() == &type_int) ) {
 				EmitOpcode( OP_STORE_F, def2, def );
 			} else if ( ( type == &type_vector ) && ( def2->TypeDef() == &type_vector ) ) {
 				EmitOpcode( OP_STORE_V, def2, def );
 			} else if ( ( type == &type_string ) && ( def2->TypeDef() == &type_string ) ) {
 				EmitOpcode( OP_STORE_S, def2, def );
+			} else if ( ( type == &type_bytes ) && ( def2->TypeDef() == &type_bytes ) ) {
+				EmitOpcode( OP_STORE_B, def2, def );
 			} else if ( ( type == &type_entity ) && ( ( def2->TypeDef() == &type_entity ) || ( def2->TypeDef()->Inherits( &type_object ) ) ) ) {
 				EmitOpcode( OP_STORE_ENT, def2, def );
 			} else if ( ( type->Inherits( &type_object ) ) && ( def2->TypeDef() == &type_entity ) ) {
@@ -2333,6 +2447,33 @@ void idCompiler::ParseVariableDef( idTypeDef *type, const char *name ) {
 
 /*
 ================
+idCompiler::GetEventArgForType
+================
+*/
+char idCompiler::GetEventArgForType( const idTypeDef *type ) {
+	char argType = '\0';
+
+	if ( type == &type_float ) {
+		argType = D_EVENT_FLOAT;
+	} else if ( type == &type_int ) {
+		argType = D_EVENT_INTEGER;
+	} else if ( type == &type_vector ) {
+		argType = D_EVENT_VECTOR;
+	} else if ( type == &type_string ) {
+		argType = D_EVENT_STRING;
+	} else if ( type == &type_bytes ) {
+		argType = D_EVENT_BYTES; // TODO: otherwise to add a new type means regenerating all the Callbacks
+	} else if ( type == &type_entity ) {
+		argType = D_EVENT_ENTITY;
+	} else if ( type == &type_void ) {
+		argType = D_EVENT_VOID;
+	}
+	
+	return argType;
+}
+
+/*
+================
 idCompiler::GetTypeForEventArg
 ================
 */
@@ -2357,6 +2498,10 @@ idTypeDef *idCompiler::GetTypeForEventArg( char argType ) {
 		type = &type_string;
 		break;
 
+	case D_EVENT_BYTES :
+		type = &type_bytes;
+		break;
+
 	case D_EVENT_ENTITY :
 	case D_EVENT_ENTITY_NULL :
 		type = &type_entity;
@@ -2378,6 +2523,114 @@ idTypeDef *idCompiler::GetTypeForEventArg( char argType ) {
 	}
 	
 	return type;
+}
+
+/*
+================
+idCompiler::ParseLibraryFunctionDef
+================
+*/
+void idCompiler::ParseLibraryFunctionDef( idTypeDef *returnType, const char *name ) {
+	char			eventReturnType;
+	char			eventArgType;
+	idTypeDef		*argType;
+	idTypeDef		*type;
+	idVarDef		*def;
+	int 			i;
+	int				num;
+	int 			numParms;
+	const char		*format;
+	const idEventDef *ev;
+	idStr			parmName;
+	function_t		*func;
+	const idTypeDef	*parmType;
+
+	// set the return type
+	eventReturnType = GetEventArgForType( returnType );
+	// TODO: since D_EVENT_VOID is '\0', a better way to handle errors
+	// if (eventReturnType == '\0') {
+	// 	Error( "Unknown return type '%s'", returnType->Name() );
+	// }
+
+	type = ParseLibraryFunction( returnType, name );
+	def = gameLocal.program.GetDef( type, name, scope );
+	if ( !def ) {
+		def = gameLocal.program.AllocDef( type, name, scope, true );
+		type->def = def;
+
+		func = &gameLocal.program.AllocFunction( def );
+		// This is a job for the library
+		def->initialized = idVarDef::uninitialized;
+	} else {
+		func = def->value.functionPtr;
+		assert( func );
+	}
+
+	if (parserPtr->InLibraryHeader()) {
+		// Abusing the initialized states to get a ternary.
+		def->initialized = idVarDef::stackVariable;
+	}
+
+	if ( func->eventdef ) {
+		// These are essentially header files, so this is fine.
+		return;
+	}
+
+	// calculate stack space used by parms
+	// stgatilov #4713: we must do it as early as we see prototype
+	// because parmTotal must be correct when method calls are compiled
+	numParms = type->NumParameters();
+	assert(numParms <= 8);
+
+	func->parmSize.SetNum( numParms );
+	func->parmTotal = 0;
+	idList<EventArg> evarglist;
+	evarglist.Resize(numParms);
+	for( i = 0; i < numParms; i++ ) {
+		parmType = type->GetParmType( i );
+		parmName = type->GetParmName( i );
+		func->parmSize[ i ] = parmType->Size();
+		func->parmTotal += func->parmSize[ i ];
+		eventArgType = GetEventArgForType( parmType );
+		// TODO: since D_EVENT_VOID is '\0', a better way to handle errors
+		// if (eventArgType == '\0') {
+		// 	Error( "Unknown type '%s'", argType->Name() );
+		// }
+
+		EventArg evarg;
+		evarg.type = eventArgType;
+		evarg.name = parmName.c_str();
+		// TODO: needs lifetime
+		idStr *desc = new idStr("(unset: dynamic)");
+		evarg.desc = desc->c_str();
+		evarglist.Append(evarg);
+	}
+
+	// int numEventCommands = idEventDef::NumEventCommands();
+	const EventArgs *evargs = new EventArgs(&evarglist);
+	idStr *evname = new idStr(name);
+	evname->ReAllocate(strlen(name), true);
+	ev = new idEventDef(evname->c_str(), *evargs, eventReturnType, "(unset: dynamic)");
+	// TODO: Race condition, but we are always single-threaded here?
+	// Sort out freeing when we just have ignored duplicates
+	// if (idEventDef::NumEventCommands() == numEventCommands) {
+	// 	free(evname);
+	// 	free(evargs);
+	// }
+
+	// Since we alter the event table, idEventDef may have set errors for us.
+	idEvent::CheckError();
+
+	func->eventdef = ev;
+
+	if (!activeLibrary) {
+		Error("Trying to create a library function without an extern namespace to instantiate a matching library");
+	}
+
+	activeLibrary->AddFunction(func);
+	func->filenum = activeLibrary->libraryNumber;
+
+	ExpectToken( ";" );
 }
 
 /*
@@ -2529,10 +2782,27 @@ void idCompiler::ParseDefs( void ) {
     
 	ParseName( name );
 
-	if ( type == &type_namespace ) {
+	if ( type == &type_namespace || type == &type_externnamespace ) {
 		def = gameLocal.program.GetDef( type, name, scope );
 		if ( !def ) {
 			def = gameLocal.program.AllocDef( type, name, scope, true );
+		}
+
+		if ( type == &type_externnamespace ) {
+			Library *libraryMgr = gameLocal.GetLibrary();
+			activeLibrary = libraryMgr->AddLibrary(name);
+
+			if (parserPtr->InLibraryHeader()) {
+				if (activeLibrary->path != "") {
+					Error("Library '%s' already has a path '%s'", activeLibrary->name.c_str(), activeLibrary->path.c_str());
+				}
+
+				activeLibrary->path = parserPtr->GetLibraryPath();
+
+				if (activeLibrary->path == "") {
+					Error("Library '%s' has no path", activeLibrary->name.c_str());
+				}
+			}
 		}
 		ParseNamespace( def );
 	} else if ( CheckToken( "::" ) ) {
@@ -2587,6 +2857,8 @@ void idCompiler::ParseNamespace( idVarDef *newScope ) {
 		ParseDefs();
 	}
 
+	activeLibrary = NULL;
+
 	scope = oldscope;
 }
 
@@ -2609,6 +2881,7 @@ void idCompiler::CompileFile( const char *text, const char *filename, bool toCon
 	loopDepth			= 0;
 	eof					= false;
 	braceDepth			= 0;
+	activeLibrary = NULL;
 	immediateType		= NULL;
 	currentLineNumber	= 0;
 	console				= toConsole;

@@ -227,6 +227,7 @@ private:
 	void						Event_SetSecretsTotal( float secrets);
 
 	void						Event_CallFunctionsByWildcard( const char* functionNameWildcard );
+	void						Event_SetDeclText( const char* declType, const char* name, int length, const char* text ); // SteveL #3962
 
 public:							
 								CLASS_PROTOTYPE( idThread );
@@ -306,10 +307,13 @@ public:
 	static void					EndMultiFrameEvent( idEntity *ent, const idEventDef *event );
 
 	static void					ReturnString( const char *text );
+	static void					ReturnBytes( char *text );
 	static void					ReturnFloat( const float value );
 	static void					ReturnInt( const int value );
 	static void					ReturnVector( idVec3 const &vec );
 	static void					ReturnEntity( idEntity *ent );
+
+	static bool					LoadPCMFromMemory( const char* name, int num_channels, int bits_per_sample, int num_samples_per_sec, int objectSize, int objectMemSize, const char* subtitleDecl, byte* nonCacheData );
 };
 
 /*
