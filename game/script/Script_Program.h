@@ -34,7 +34,7 @@ class Library;
 #define MAX_STATEMENTS		(80 << 10)			// statement_t - 18 bytes last I checked (stgatilov: it was never 18 bytes, now it is 40 bytes)
 
 typedef enum {
-	ev_error = -1, ev_void, ev_scriptevent, ev_namespace, ev_externnamespace, ev_string, ev_float, ev_int, ev_vector, ev_entity, ev_field, ev_function, ev_virtualfunction, ev_pointer, ev_object, ev_jumpoffset, ev_argsize, ev_boolean, ev_libraryfunction
+	ev_error = -1, ev_void, ev_scriptevent, ev_namespace, ev_externnamespace, ev_string, ev_bytes, ev_float, ev_int, ev_vector, ev_entity, ev_field, ev_function, ev_virtualfunction, ev_pointer, ev_object, ev_jumpoffset, ev_argsize, ev_boolean, ev_libraryfunction
 } etype_t;
 
 class function_t {
@@ -62,6 +62,7 @@ public:
 
 typedef union eval_s {
 	const char			*stringPtr;
+	char				*bytesPtr; // TODO: It would be better to have bytes_t, a pair of length and byte*, but then the Callbacks would need regenerated
 	float				_float;
 	float				vector[ 3 ];
 	function_t			*function;
@@ -287,6 +288,7 @@ typedef union varEval_s {
 	function_t				*functionPtr;
 	int 					*intPtr;
 	byte					*bytePtr;
+	char					**bytesPtr; // TODO: confusing but accurate
 	int 					*entityNumberPtr;
 	int 					libraryFunctionNumber[2]; // TODO: function_t* is definitely bigger than this, given C++-ABI - but check portability to be sure
 	int						virtualFunction;
@@ -377,6 +379,7 @@ extern	idTypeDef	type_scriptevent;
 extern	idTypeDef	type_namespace;
 extern	idTypeDef	type_externnamespace;
 extern	idTypeDef	type_string;
+extern	idTypeDef	type_bytes;
 extern	idTypeDef	type_float;
 extern	idTypeDef	type_int;
 extern	idTypeDef	type_vector;
@@ -396,6 +399,7 @@ extern	idVarDef	def_scriptevent;
 extern	idVarDef	def_namespace;
 extern	idVarDef	def_externnamespace;
 extern	idVarDef	def_string;
+extern	idVarDef	def_bytes;
 extern	idVarDef	def_float;
 extern	idVarDef	def_int;
 extern	idVarDef	def_vector;
@@ -465,6 +469,7 @@ private:
 public:
 	idVarDef									*returnDef;
 	idVarDef									*returnStringDef;
+	idVarDef									*returnCharStarDef;
 
 												idProgram();
 												~idProgram();
@@ -531,6 +536,7 @@ public:
 	void										ReturnInteger( int value );
 	void										ReturnVector( idVec3 const &vec );
 	void										ReturnString( const char *string );
+	void										ReturnBytes( char* bytes ); // only for external libs
 	void										ReturnEntity( idEntity *ent );
 	
 	int											NumFilenames( void ) { return fileList.Num( ); }
@@ -617,6 +623,15 @@ idProgram::ReturnString
 */
 ID_INLINE void idProgram::ReturnString( const char *string ) {
 	idStr::Copynz( returnStringDef->value.stringPtr, string, MAX_STRING_LEN );
+}
+
+/*
+================
+idProgram::ReturnBytes
+================
+*/
+ID_INLINE void idProgram::ReturnBytes( char* bytes ) {
+	*returnDef->value.bytesPtr = bytes;
 }
 
 /*

@@ -311,6 +311,16 @@ const idEventDef EV_Thread_CallFunctionsByWildcard(
 	"Calls global functions with names matching the specified wildcard in separate threads (in lexicographical order). "
 	"INTERNAL: don't use in mission scripting!"
 );
+const idEventDef EV_SetDeclText(
+	"setDeclText", EventArgs(
+	's', "declType", "",
+	's', "name", "",
+	'd', "length", "",
+	'B', "text", ""
+	),
+	'd',
+	"Calls global functions with names matching the specified wildcard in separate threads (in lexicographical order). "
+);
 
 CLASS_DECLARATION( idClass, idThread )
 	EVENT( EV_Thread_Execute,				idThread::Event_Execute )
@@ -447,6 +457,7 @@ CLASS_DECLARATION( idClass, idThread )
 
 	EVENT( EV_SetSecretsFound,				idThread::Event_SetSecretsFound )
 	EVENT( EV_SetSecretsTotal,				idThread::Event_SetSecretsTotal )
+	EVENT( EV_SetDeclText,					idThread::Event_SetDeclText )
 
 	EVENT( EV_Thread_CallFunctionsByWildcard, idThread::Event_CallFunctionsByWildcard )
 	END_CLASS
@@ -1099,6 +1110,15 @@ void idThread::Warning( const char *fmt, ... ) const {
 	va_end( argptr );
 
 	interpreter.Warning( "%s", text );
+}
+
+/*
+================
+idThread::ReturnBytes
+================
+*/
+void idThread::ReturnBytes( char *text ) {
+	gameLocal.program.ReturnBytes( text );
 }
 
 /*
@@ -2020,6 +2040,16 @@ void idThread::Event_SetShaderParm( int parmnum, float value ) {
 
 /*
 ================
+idThread::LoadSoundFromMemory
+================
+*/
+bool idThread::LoadPCMFromMemory( const char *name, int num_channels, int bits_per_sample, int num_samples_per_sec, int objectSize, int objectMemSize, const char* subtitleDecl, byte* nonCacheData ) {
+	idStr _name = name;
+	return gameSoundWorld->LoadPCMFromMemory( _name, num_channels, bits_per_sample, num_samples_per_sec, objectSize, objectMemSize, subtitleDecl, nonCacheData );
+}
+
+/*
+================
 idThread::Event_StartMusic
 ================
 */
@@ -2858,4 +2888,23 @@ void idThread::Event_CallFunctionsByWildcard( const char* functionNameWildcard )
 		newThread->CallFunction( func, true );
 		newThread->DelayedStart( 0 );
 	}
+}
+
+// stgatilov #6336: initializing several independent user addons
+void idThread::Event_SetDeclText( const char* declType, const char* name, int length, const char* text )
+{
+	int success = 0;
+	const idDecl *decl = NULL;
+	declType_t type = declManager->GetDeclTypeFromName( declType );
+	if (type == DECL_MAX_TYPES) {
+		goto Event_SetDeclText_Return;
+	}
+	decl = declManager->CreateNewDeclFromMemory( type, name, "<memory>", length, text );
+	if (decl == NULL) {
+		goto Event_SetDeclText_Return;
+	}
+	success = 1;
+
+Event_SetDeclText_Return:
+	idThread::ReturnInt(success);
 }

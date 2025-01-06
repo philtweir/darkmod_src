@@ -27,6 +27,7 @@ idTypeDef	type_scriptevent( ev_scriptevent, &def_scriptevent, "scriptevent", siz
 idTypeDef	type_namespace( ev_namespace, &def_namespace, "namespace", sizeof(int), NULL );
 idTypeDef	type_externnamespace( ev_externnamespace, &def_externnamespace, "extern namespace", sizeof(int), NULL );
 idTypeDef	type_string( ev_string, &def_string, "string", MAX_STRING_LEN, NULL );
+idTypeDef	type_bytes( ev_bytes, &def_bytes, "bytes", sizeof(char*), NULL );
 idTypeDef	type_float( ev_float, &def_float, "float", sizeof(float), NULL );
 idTypeDef	type_int( ev_float, &def_float, "int", sizeof(int), NULL );
 idTypeDef	type_vector( ev_vector, &def_vector, "vector", sizeof(idVec3), NULL );
@@ -46,6 +47,7 @@ idVarDef	def_scriptevent( &type_scriptevent );
 idVarDef	def_namespace( &type_namespace );
 idVarDef	def_externnamespace( &type_externnamespace );
 idVarDef	def_string( &type_string );
+idVarDef	def_bytes( &type_bytes );
 idVarDef	def_float( &type_float );
 idVarDef	def_int( &type_int );
 idVarDef	def_vector( &type_vector );
@@ -688,6 +690,10 @@ void idVarDef::SetValue( const eval_t &_value, bool constant ) {
 		idStr::Copynz( value.stringPtr, _value.stringPtr, MAX_STRING_LEN );
 		break;
 
+	case ev_bytes :
+		*value.bytesPtr = _value.bytesPtr;
+		break;
+
 	case ev_float :
 		*value.floatPtr = _value._float;
 		break;
@@ -791,7 +797,7 @@ void idVarDef::PrintInfo( idFile *file, int instructionPointer ) const {
 			switch( etype ) {
 			case ev_string :
 				file->Printf( "\"" );
-                len = static_cast<int>(strlen(value.stringPtr));
+				len = static_cast<int>(strlen(value.stringPtr));
 				ch = value.stringPtr;
 				for( i = 0; i < len; i++, ch++ ) {
 					if ( idStr::CharIsPrintable( *ch ) ) {
@@ -810,7 +816,7 @@ void idVarDef::PrintInfo( idFile *file, int instructionPointer ) const {
 				break;
 
 			case ev_float :
-                file->Printf( "%f", *value.floatPtr );
+				file->Printf( "%f", *value.floatPtr );
 				break;
 
 			case ev_virtualfunction :
@@ -1296,7 +1302,7 @@ idVarDef *idProgram::AllocDef( idTypeDef *type, const char *name, idVarDef *scop
 	idVarDef	*def_z;
 
 	// allocate a new def
-    def = AllocVarDef(type, name, scope);
+	def = AllocVarDef(type, name, scope);
 
 	if ( ( type->Type() == ev_vector ) || ( ( type->Type() == ev_field ) && ( type->FieldType()->Type() == ev_vector ) ) ) {
 		//

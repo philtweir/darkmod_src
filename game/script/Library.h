@@ -18,21 +18,16 @@ Project: The Dark Mod (http://www.thedarkmod.com/)
 
 #include "../gamesys/Class.h"
 #include "../../idlib/math/Vector.h"
+#include "LibraryABI.h"
 
 typedef bool (idClass::*boolFunc) ();
-typedef bool (idClass::*initFunc) (
-	void (*ReturnString)( const char *text ),
-	void (*ReturnFloat)( const float value ),
-	void (*ReturnInt)( const int value ),
-	void (*ReturnVector)( idVec3 const &vec )
-	// void (*ReturnEntity)( void *ent ) // TODO: fix void*
-);
+typedef bool (idClass::*initFunc) (LibraryABI abi);
 typedef const char* (idClass::*strFunc) ();
 class Library;
 
 class LibraryModule {
 	public:
-		LibraryModule(Library* library, idStr _path, idStr _dllName) : parentLibrary(library), path(_path), dllName(_dllName), fh(0) {}
+		LibraryModule(Library* library, idStr _path, idStr _dllName);
 		~LibraryModule();
 		void Load(idList<const function_t*> requestedFunctions, idList<idEventFunc<idClass>>* functionCallbacks);
 
@@ -47,6 +42,8 @@ class LibraryModule {
 		template <typename T>
 		void LoadFunction(T* funcPtr, const char* name);
 		void Error( const char *fmt, ... ) const id_attribute((format(printf,2,3)));
+		static bool ConfirmLoad();
+		LibraryABI abi;
 };
 
 class Library : public idClass

@@ -56,6 +56,7 @@ private:
 
 	void				PopParms( int numParms );
 	void				PushString( const char *string );
+	void				PushBytes( char *string );
 	void				PushVector( const idVec3 &vector );
 	void				Push( int value );
 	const char			*FloatToString( float value );
@@ -153,6 +154,19 @@ ID_INLINE void idInterpreter::Push( int value ) {
 	}
 	*( int * )&localstack[ localstackUsed ]	= value;
 	localstackUsed += sizeof( int );
+}
+
+/*
+====================
+idInterpreter::PushBytes
+====================
+*/
+ID_INLINE void idInterpreter::PushBytes( char* value ) {
+	if ( localstackUsed + sizeof( char* ) > LOCALSTACK_SIZE ) {
+		Error( "Push: locals stack overflow\n" );
+	}
+	*( char ** )&localstack[ localstackUsed ]	= value;
+	localstackUsed += sizeof( char* );
 }
 
 /*

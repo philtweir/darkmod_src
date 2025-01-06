@@ -101,6 +101,7 @@ opcode_t idCompiler::opcodes[] = {
 	{ "=", "STORE_F", 6, true, &def_float, &def_float, &def_float },
 	{ "=", "STORE_V", 6, true, &def_vector, &def_vector, &def_vector },
 	{ "=", "STORE_S", 6, true, &def_string, &def_string, &def_string },
+	{ "=", "STORE_B", 6, true, &def_bytes, &def_bytes, &def_bytes },
 	{ "=", "STORE_ENT", 6, true, &def_entity, &def_entity, &def_entity },
 	{ "=", "STORE_BOOL", 6, true, &def_boolean, &def_boolean, &def_boolean },
 	{ "=", "STORE_OBJENT", 6, true, &def_object, &def_entity, &def_object },
@@ -162,9 +163,9 @@ opcode_t idCompiler::opcodes[] = {
 	{ "<PUSH>", "PUSH_F", -1, false, &def_float, &def_float, &def_void },
 	{ "<PUSH>", "PUSH_V", -1, false, &def_vector, &def_vector, &def_void },
 	{ "<PUSH>", "PUSH_S", -1, false, &def_string, &def_string, &def_void },
+	{ "<PUSH>", "PUSH_B", -1, false, &def_bytes, &def_bytes, &def_void },
 	{ "<PUSH>", "PUSH_ENT", -1, false, &def_entity, &def_entity, &def_void },
 	{ "<PUSH>", "PUSH_OBJ", -1, false, &def_object, &def_object, &def_void },
-	// RMV { "<PUSH>", "PUSH_LIB", -1, false, &def_library, &def_library, &def_void },
 	{ "<PUSH>", "PUSH_OBJENT", -1, false, &def_entity, &def_object, &def_void },
 	{ "<PUSH>", "PUSH_FTOS", -1, false, &def_string, &def_float, &def_void },
 	{ "<PUSH>", "PUSH_BTOF", -1, false, &def_float, &def_boolean, &def_void },
@@ -402,6 +403,12 @@ idVarDef *idCompiler::FindImmediate( const idTypeDef *type, const eval_t *eval, 
 
 		case ev_entity :
 			if ( *def->value.intPtr == eval->entity ) {
+				return def;
+			}
+			break;
+
+		case ev_bytes :
+			if ( *def->value.bytesPtr == eval->bytesPtr ) {
 				return def;
 			}
 			break;
@@ -861,6 +868,8 @@ idTypeDef *idCompiler::CheckType( void ) {
 		type = &type_entity;
 	} else if ( token == "string" ) {
 		type = &type_string;
+	} else if ( token == "bytes" ) {
+		type = &type_bytes;
 	} else if ( token == "void" ) {
 		type = &type_void;
 	} else if ( token == "object" ) {
@@ -1033,6 +1042,10 @@ idVarDef *idCompiler::EmitFunctionParms( int op, idVarDef *func, int startarg, i
 
 		case ev_float :
 			resultOp = OP_STORE_F;
+			break;
+
+		case ev_bytes :
+			resultOp = OP_STORE_B;
 			break;
 
 		case ev_vector :
@@ -2371,6 +2384,8 @@ void idCompiler::ParseVariableDef( idTypeDef *type, const char *name ) {
 				EmitOpcode( OP_STORE_V, def2, def );
 			} else if ( ( type == &type_string ) && ( def2->TypeDef() == &type_string ) ) {
 				EmitOpcode( OP_STORE_S, def2, def );
+			} else if ( ( type == &type_bytes ) && ( def2->TypeDef() == &type_bytes ) ) {
+				EmitOpcode( OP_STORE_B, def2, def );
 			} else if ( ( type == &type_entity ) && ( ( def2->TypeDef() == &type_entity ) || ( def2->TypeDef()->Inherits( &type_object ) ) ) ) {
 				EmitOpcode( OP_STORE_ENT, def2, def );
 			} else if ( ( type->Inherits( &type_object ) ) && ( def2->TypeDef() == &type_entity ) ) {
@@ -2446,6 +2461,8 @@ char idCompiler::GetEventArgForType( const idTypeDef *type ) {
 		argType = D_EVENT_VECTOR;
 	} else if ( type == &type_string ) {
 		argType = D_EVENT_STRING;
+	} else if ( type == &type_bytes ) {
+		argType = D_EVENT_BYTES; // TODO: otherwise to add a new type means regenerating all the Callbacks
 	} else if ( type == &type_entity ) {
 		argType = D_EVENT_ENTITY;
 	} else if ( type == &type_void ) {
@@ -2479,6 +2496,10 @@ idTypeDef *idCompiler::GetTypeForEventArg( char argType ) {
 
 	case D_EVENT_STRING :
 		type = &type_string;
+		break;
+
+	case D_EVENT_BYTES :
+		type = &type_bytes;
 		break;
 
 	case D_EVENT_ENTITY :

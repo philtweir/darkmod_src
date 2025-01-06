@@ -16,6 +16,7 @@ Project: The Dark Mod (http://www.thedarkmod.com/)
 #include "../Game_local.h"
 #include "../DarkModGlobals.h"
 #include "Library.h"
+#include <iostream>
 #include <dlfcn.h>
 
 //===============================================================================
@@ -303,8 +304,22 @@ void Library::Load() {
 	Type->Init();
 }
 
-#include <iostream>
-#include <dlfcn.h>
+LibraryModule::LibraryModule(Library* library, idStr _path, idStr _dllName) : parentLibrary(library), path(_path), dllName(_dllName), fh(0), abi(LibraryABI(
+	LibraryModule::ConfirmLoad,
+	returnCallbacks_t {
+		idThread::ReturnString,
+		idThread::ReturnFloat,
+		idThread::ReturnInt,
+		idThread::ReturnVector,
+		idThread::ReturnBytes,
+	},
+	idThread::LoadPCMFromMemory
+)) {}
+
+bool LibraryModule::ConfirmLoad() {
+	common->Warning( "Library loaded" );
+	return true;
+}
 
 template <typename T>
 void LibraryModule::LoadFunction(T* funcPtr, const char* name) {
@@ -384,12 +399,7 @@ void LibraryModule::Load(idList<const function_t*> requestedFunctions, idList<id
 
 	(*functionCallbacks)[requestedFunctions.Num()] = {NULL, NULL};
 
-	(parentLibrary->*Initialize)(
-		idThread::ReturnString,
-		idThread::ReturnFloat,
-		idThread::ReturnInt,
-		idThread::ReturnVector
-	);
+	(parentLibrary->*Initialize)(abi);
 }
 
 LibraryModule::~LibraryModule() {

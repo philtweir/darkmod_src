@@ -653,6 +653,8 @@ void idInterpreter::LeaveFunction( idVarDef *returnDef ) {
 	// return value
 	if ( returnDef ) {
 		switch( returnDef->Type() ) {
+		// We intentionally do not allow ev_bytes to be passed back from script functions
+		// as we have no way of persisting it reliably, so it should be short-lived.
 		case ev_string :
 			gameLocal.program.ReturnString( GetString( returnDef ) );
 			break;
@@ -734,6 +736,10 @@ void idInterpreter::CallEvent( const function_t *func, int argsize ) {
 			gameLocal.program.ReturnInteger( 0 );
 			break;
 
+		case D_EVENT_BYTES :
+			gameLocal.program.ReturnBytes( 0 );
+			break;
+
 		case D_EVENT_FLOAT :
 			gameLocal.program.ReturnFloat( 0 );
 			break;
@@ -769,6 +775,11 @@ void idInterpreter::CallEvent( const function_t *func, int argsize ) {
 		case D_EVENT_INTEGER :
 			var.intPtr = ( int * )&localstack[ start + pos ];
 			( *( int * )&data[ i ] ) = int( *var.floatPtr );
+			break;
+
+		case D_EVENT_BYTES :
+			var.bytesPtr = ( char ** )&localstack[ start + pos ];
+			( *( char ** )&data[ i ] ) = *var.bytesPtr;
 			break;
 
 		case D_EVENT_FLOAT :
@@ -905,6 +916,11 @@ void idInterpreter::CallLibraryEvent( int libraryNumber, int functionNumber, int
 			*( int * )&data[ i ] = int( *source.floatPtr );
 			break;
 
+		case D_EVENT_BYTES :
+			source.bytesPtr = ( char ** )&localstack[ start + pos ];
+			*( char ** )&data[ i ] = *source.bytesPtr;
+			break;
+
 		case D_EVENT_FLOAT :
 			source.intPtr = ( int * )&localstack[ start + pos ];
 			*( float * )&data[ i ] = *source.floatPtr;
@@ -986,6 +1002,11 @@ void idInterpreter::CallSysEvent( const function_t *func, int argsize ) {
 		case D_EVENT_INTEGER :
 			source.intPtr = ( int * )&localstack[ start + pos ];
 			*( int * )&data[ i ] = int( *source.floatPtr );
+			break;
+
+		case D_EVENT_BYTES :
+			source.bytesPtr = ( char ** )&localstack[ start + pos ];
+			*( char ** )&data[ i ] = *source.bytesPtr;
 			break;
 
 		case D_EVENT_FLOAT :
@@ -1721,6 +1742,12 @@ bool idInterpreter::Execute( void ) {
 			SetString( st->b, GetString( st->a ) );
 			break;
 
+		case OP_STORE_B:
+			var_a = GetVariable( st->a );
+			var_b = GetVariable( st->b );
+			*var_b.bytesPtr = *var_a.bytesPtr;
+			break;
+
 		case OP_STORE_V:
 			var_a = GetVariable( st->a );
 			var_b = GetVariable( st->b );
@@ -2023,6 +2050,11 @@ bool idInterpreter::Execute( void ) {
 			PushString( GetString( st->a ) );
 			break;
 
+		case OP_PUSH_B:
+			var_a = GetVariable( st->a );
+			PushBytes( *var_a.bytesPtr );
+			break;
+
 		case OP_PUSH_V:
 			var_a = GetVariable( st->a );
             PushVector(*var_a.vectorPtr);
@@ -2111,6 +2143,10 @@ bool idInterpreter::EnterFunctionVarArgVN(const function_t *func, bool clearStac
 
 			case 's':
 				PushString(va_arg(args, char *));
+			break;
+
+			case 'B':
+				PushBytes(va_arg(args, char *));
 			break;
 
 			case 'f':
